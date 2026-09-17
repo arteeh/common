@@ -60,8 +60,15 @@ pattern, and the rules for what can and cannot move to brew.
 ### Remove a package
 1. Remove the `brew "<name>"` line from the Brewfile.
 2. Open a PR.
-3. On next login after the OS update, users who got it through the managed set
-   get it uninstalled. Users who installed it themselves are unaffected.
+3. On next successful login sync after the OS update, packages recorded in
+   the previous managed state get uninstalled. Packages outside that state
+   are unaffected. State records the desired set, not who originally installed
+   each package, so a manually installed package can later become managed.
+
+Bluefinctl is no longer provisioned by common. Removing its dedicated Brewfile
+uses this existing lifecycle to uninstall state-tracked copies; no separate
+cleanup script is needed. Native `ujust` recipes must not delegate to `bctl`,
+even if an untracked copy remains installed.
 
 ### Add or remove a cask
 
@@ -86,7 +93,7 @@ ChairLift is a managed cask installed for every user through
 
 ```ruby
 tap "frostyard/tap", trusted: true
-cask "chairlift"
+cask "frostyard/tap/chairlift"
 ```
 
 The tap line requires `trusted: true`; Homebrew 6 blocks untrusted taps. The
@@ -119,12 +126,33 @@ desktop file at `/usr/share/applications/org.frostyard.ChairLift.desktop`
 upstream icons under `/usr/share/icons/hicolor/`, so every user gets a
 launcher.
 
+### Hand ChairLift to a dedicated installer
+
+Images that supply their own ChairLift migration may invoke
+`/usr/libexec/brew-preinstall --external-chairlift`. Without that argument,
+common's existing behavior is unchanged. The opt-in excludes the entire
+`chairlift.Brewfile` from tapping, hashing, bundling and managed state, and
+protects the historical unqualified, Frostyard-qualified and Bluefin-qualified
+ChairLift names from OS-diet removal. Other packages keep their usual lifecycle.
+Keep that Brewfile dedicated to ChairLift; do not place unrelated packages in it.
+
+The caller must capture any old managed-state authorization before invoking this
+mode: a successful generic sync drops ChairLift from its state. The caller owns
+first installation, migration, retry and future removal policy. Run generic sync
+even if that dedicated installer fails, so unrelated packages are not blocked.
+
+`brew-preinstall --capabilities` prints `external-chairlift-v1` without touching
+Homebrew or user state. Downstream image builds should require this capability
+before enabling the handoff. Land this common change and update the downstream
+common pin before shipping; do not carry a downstream source patch or silently
+call an older script that ignores the option.
+
 ### Add a tap + package from a non-core tap
 
 Homebrew 6.0 syntax — `trusted: true` is required:
 ```ruby
-tap "projectbluefin/bluefinctl", trusted: true
-brew "bluefinctl"
+tap "frostyard/tap", trusted: true
+cask "frostyard/tap/chairlift"
 ```
 Without `trusted: true` the tap is blocked and the formula is silently
 unavailable. See [placement-rules.md](references/placement-rules.md#homebrew-60-tap-trust-required-as-of-2026-06-11).
@@ -140,7 +168,8 @@ not `system_files/bluefin/preinstall.d/`. See [package-set.md](references/packag
 
 - Suggesting `rpm-ostree install` for any missing tool — this is never correct on Bluefin
 - Adding a package to `preinstall.d/` that has a udev rule, kernel module, D-Bus system service, FUSE driver, firmware, or PAM dependency — it must stay as an RPM
-- Adding a tap without `trusted: true` / `--trust` (Homebrew 6.0 blocks untrusted taps silently)
+- Adding a tap without `trusted: true` in a Brewfile, or without a `brew trust` call after `brew tap` in a recipe (Homebrew 6.0 blocks untrusted taps silently)
+- Passing `--trust` to `brew tap` — it is not a valid flag and Homebrew 6.0 exits non-zero; use `brew trust <tap>` as a separate command
 - Using `arm:` / `intel:` checksum keys for a Linux cask — those keys are macOS-only and resolve to no checksum on Linux
 - Adding unknown keys to `/usr/share/chairlift/config.yml` — ChairLift disables
   the whole application on unknown page, group, or field names

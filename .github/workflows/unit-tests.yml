@@ -7,6 +7,7 @@ on:
     paths:
       - "system_files/**"
       - "tests/**"
+      - "scripts/validate-brewfiles.sh"
       - "Justfile"
   push:
     branches:
@@ -14,9 +15,13 @@ on:
     paths:
       - "system_files/**"
       - "tests/**"
+      - "scripts/validate-brewfiles.sh"
       - "Justfile"
   merge_group:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
@@ -91,8 +96,8 @@ jobs:
       - name: Run bats (changelog.just)
         run: bats tests/test_changelog.bats
 
-      - name: Run bats (update.just)
-        run: bats tests/test_update_just.bats
+      - name: Run bats (update.just and native recipes)
+        run: bats tests/test_update_just.bats tests/test_native_recipes.bats
 
       - name: Run bats (ublue-fastfetch)
         run: bats tests/test_ublue_fastfetch.bats
@@ -114,6 +119,11 @@ jobs:
 
       - name: Run bats (brew-preinstall)
         run: bats tests/test_brew_preinstall.bats
+
+      - name: Test Brewfile validator
+        run: |
+          shellcheck scripts/validate-brewfiles.sh tests/test_validate_brewfiles.bats
+          bats tests/test_validate_brewfiles.bats
 
       - name: Run bats (oem-brew hook)
         run: bats tests/test_oem_brew.bats
