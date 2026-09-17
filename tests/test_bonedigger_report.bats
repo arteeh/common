@@ -67,11 +67,12 @@ teardown() {
 
     run bash -c '
         source "$1"
-        BOOTC_JSON='{"status":{"booted":{"image":{"image":{"image":"ghcr.io/projectbluefin/dakota:stable"}}}}}'
         IMAGE_INFO_FILE="$2"
+        BOOTC_JSON="$3"
         read_image_info
         printf "%s|%s|%s" "$IMAGE_NAME" "$IMAGE_TAG" "$IMAGE_REF"
-    ' _ "$BONEDIGGER_SCRIPT" "$WORKDIR/stale-image-info.json"
+    ' _ "$BONEDIGGER_SCRIPT" "$WORKDIR/stale-image-info.json" \
+        '{"status":{"booted":{"image":{"image":{"image":"ghcr.io/projectbluefin/dakota:stable"}}}}}'
 
     [ "$status" -eq 0 ]
     [ "$output" = "dakota|stable|ghcr.io/projectbluefin/dakota:stable" ]
@@ -83,11 +84,12 @@ teardown() {
 
     run bash -c '
         source "$1"
-        BOOTC_JSON='{"status":{"booted":null}}'
         IMAGE_INFO_FILE="$2"
+        BOOTC_JSON="$3"
         read_image_info
         printf "%s|%s" "$IMAGE_NAME" "$IMAGE_TAG"
-    ' _ "$BONEDIGGER_SCRIPT" "$WORKDIR/stale-image-info.json"
+    ' _ "$BONEDIGGER_SCRIPT" "$WORKDIR/stale-image-info.json" \
+        '{"status":{"booted":null}}'
 
     [ "$status" -eq 0 ]
     [ "$output" = "bluefin|latest" ]
