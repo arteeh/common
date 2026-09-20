@@ -21,13 +21,19 @@ write_mock() {
     chmod +x "${MOCKDIR}/$1"
 }
 
-# Records the requested URL and succeeds, so tests can assert on the query.
+# Records the request and succeeds, so tests can assert on the query. -G turns
+# --data-urlencode pairs into the query string, so the pairs are logged too.
 mock_curl_ok() {
     write_mock curl '#!/usr/bin/bash
+prev=""
 for arg in "$@"; do
+    case "$prev" in
+        --data-urlencode) printf "%s\n" "$arg" >> "${CURL_LOG}" ;;
+    esac
     case "$arg" in
         https://*) printf "%s\n" "$arg" >> "${CURL_LOG}" ;;
     esac
+    prev="$arg"
 done
 exit 0'
 }
@@ -39,6 +45,14 @@ exit 22'
 
 mock_bootc() {
     write_mock bootc "#!/usr/bin/bash
+printf '%s' '$1'"
+}
+
+# Succeeds, but prints a warning on stderr first — merged into stdout this is not
+# valid JSON and the tag would be lost.
+mock_bootc_noisy() {
+    write_mock bootc "#!/usr/bin/bash
+echo 'warning: /sysroot mounted read-only' >&2
 printf '%s' '$1'"
 }
 
@@ -88,6 +102,30 @@ reported_url() {
     [[ "$(reported_url)" != *"tag=latest"* ]]
     [[ "$(reported_url)" == *"flavor=gdx"* ]]
     [[ "$(reported_url)" == *"countme=1"* ]]
+}
+
+@test "bluefin-countme: bootc warnings on stderr do not cost the tag" {
+    write_image_info bluefin latest main
+    mock_bootc_noisy "$(bootc_json ghcr.io/projectbluefin/bluefin-lts:stable)"
+    mock_curl_ok
+
+    run_script
+
+    [ "$status" -eq 0 ]
+    [[ "$(reported_url)" == *"tag=stable"* ]]
+}
+
+@test "bluefin-countme: a metacharacter in a value cannot inject query parameters" {
+    write_image_info bluefin latest main
+    mock_bootc "$(bootc_json 'ghcr.io/projectbluefin/bluefin:beta&countme=9')"
+    mock_curl_ok
+
+    run_script
+
+    [ "$status" -eq 0 ]
+    grep -Fxq 'tag=beta&countme=9' "${CURL_LOG}"
+    [ "$(grep -Fxc 'countme=1' "${CURL_LOG}")" -eq 1 ]
+    ! grep -Fxq 'countme=9' "${CURL_LOG}"
 }
 
 @test "bluefin-countme: a bootc failure is logged and no tag is reported" {

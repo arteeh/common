@@ -18,5 +18,8 @@ PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
 NoNewPrivileges=yes
-RestrictAddressFamilies=AF_INET AF_INET6
+# AF_UNIX and AF_NETLINK are required, not optional: glibc's getaddrinfo talks to
+# nscd/nss-resolve over AF_UNIX and reads local interface state over AF_NETLINK,
+# so restricting to AF_INET/AF_INET6 alone breaks name resolution.
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
 SystemCallFilter=@system-service

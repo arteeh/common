@@ -97,16 +97,22 @@ ARCH=$(uname -m)
 # this unit's DynamicUser sandbox. If it fails anyway the failure is logged with
 # its own diagnostics rather than swallowed: a silent fallback here is what makes
 # every system report the compose-time tag.
+#
+# stderr is captured to its own file rather than merged into stdout: bootc may
+# print warnings while still succeeding, and merged output is not valid JSON, so
+# jq would fail and the tag would be dropped fleet-wide.
 BOOTED_REF=""
-if bootc_status=$(bootc status --json 2>&1); then
+bootc_stderr=$(mktemp)
+if bootc_status=$(bootc status --json 2>"$bootc_stderr"); then
     BOOTED_REF=$(printf '%s' "$bootc_status" |
         jq -r '.status.booted.image.image.image // .spec.image.image // empty' 2>/dev/null || true)
     if [[ -z "$BOOTED_REF" ]]; then
-        echo "bootc reported no booted image ref" >&2
+        printf 'bootc reported no booted image ref: %s\n' "$(cat "$bootc_stderr")" >&2
     fi
 else
-    printf 'bootc status failed, booted image ref unavailable: %s\n' "$bootc_status" >&2
+    printf 'bootc status failed, booted image ref unavailable: %s\n' "$(cat "$bootc_stderr")" >&2
 fi
+rm -f "$bootc_stderr"
 
 # ghcr.io/projectbluefin/bluefin-lts:stable -> bluefin-lts + stable
 #   Split the final path component only, so a registry port (registry:5000/img)
@@ -143,13 +149,21 @@ if ! sane "$IMAGE_NAME"; then
     exit 0
 fi
 
-QUERY="repo=${IMAGE_NAME}&arch=${ARCH}&countme=${BUCKET}"
-sane "$IMAGE_TAG" && QUERY+="&tag=${IMAGE_TAG}"
-sane "$IMAGE_FLAVOR" && QUERY+="&flavor=${IMAGE_FLAVOR}"
+# --data-urlencode rather than string concatenation: sane() rejects the obvious
+# junk, but '&', '=' and '%' pass it, and a value carrying one would otherwise
+# inject extra query parameters into the telemetry URL.
+QUERY_ARGS=(
+    --data-urlencode "repo=${IMAGE_NAME}"
+    --data-urlencode "arch=${ARCH}"
+    --data-urlencode "countme=${BUCKET}"
+)
+sane "$IMAGE_TAG" && QUERY_ARGS+=(--data-urlencode "tag=${IMAGE_TAG}")
+sane "$IMAGE_FLAVOR" && QUERY_ARGS+=(--data-urlencode "flavor=${IMAGE_FLAVOR}")
 
 if ! curl -sfG --max-time 30 --retry 2 --retry-delay 5 \
     -A "bluefin-countme/1 (${IMAGE_NAME})" \
-    "${ENDPOINT}?${QUERY}" -o /dev/null; then
+    "${QUERY_ARGS[@]}" \
+    "${ENDPOINT}" -o /dev/null; then
     # Leave lastrun alone so the next timer firing retries. A missed week is a
     # gap in the data; a week silently marked as reported is a wrong number.
     echo "countme ping failed, will retry on next run" >&2

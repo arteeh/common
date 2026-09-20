@@ -124,6 +124,18 @@ logs the failure to the journal and reports without a tag, rather than silently 
 fleet-wide. `bootc status` is a read-only query requiring no privileges, so it works under the
 unit's `DynamicUser=yes` sandbox.
 
+**Never merge `bootc` stderr into the JSON capture.** `bootc status --json 2>&1` mixes warnings into
+the stream, `jq` then fails to parse an otherwise successful run, and the tag is dropped fleet-wide —
+exactly the defect this reporter exists to fix. Capture stderr to its own file and log it separately.
+
+**Query values go through `curl -G --data-urlencode`.** The validator rejects unexpanded and
+mis-parsed values, but `&`, `=` and `%` pass it, and string-concatenated queries would let such a
+value inject extra parameters into the telemetry URL.
+
+**`RestrictAddressFamilies=` must include `AF_UNIX` and `AF_NETLINK`.** glibc's `getaddrinfo` talks
+to `nscd`/`nss-resolve` over `AF_UNIX` and reads local interface state over `AF_NETLINK`; a unit
+restricted to `AF_INET AF_INET6` alone can fail name resolution.
+
 **Opt-out.** Create either marker file; both are checked by `ConditionPathExists=!` on the unit and
 again by the script before any state is written, so opting out leaves no trace:
 
