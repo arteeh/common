@@ -101,9 +101,49 @@ The Containerfile pulls wallpaper artwork from `ghcr.io/ublue-os/bluefin-wallpap
 
 ## CountMe telemetry reporting
 
-Our images participate in Fedora's weekly CountMe telemetry to track installation statistics anonymously:
+Our images report installation counts two ways: upstream Fedora/EPEL CountMe (unchanged), and a
+first-party ping to `https://countme.projectbluefin.io/metalink`, which is the only source permitted
+to publish a Project Bluefin count.
+
+### First-party reporting (all images)
+
+`bluefin-countme.timer` triggers `bluefin-countme.service`, which runs
+[`/usr/libexec/bluefin-countme`](../../system_files/shared/usr/libexec/bluefin-countme) on every
+image in the family. The timer fires at `OnBootSec=15m` then every `3d`; the script itself throttles
+to one ping per 7 days, because the endpoint stores no identifier and cannot deduplicate. Firing
+more often than weekly is deliberate — it catches systems that were powered off.
+
+What is sent: image name, tag, flavor, architecture, and Fedora's coarse week-based age bucket.
+Nothing else — no machine-id, hostname, token, or any persistent identifier. State lives in
+`/var/lib/bluefin-countme` (`epoch`, `lastrun`) via `StateDirectory=`.
+
+**Tag resolution is bootc-only.** `image-tag` in `image-info.json` is the *compose-time* tag
+(`latest`); promotion retags the same digest, so the tag a system actually follows only exists in
+`bootc status --json`. The script therefore never falls back to the baked tag — if `bootc` fails it
+logs the failure to the journal and reports without a tag, rather than silently reporting `latest`
+fleet-wide. `bootc status` is a read-only query requiring no privileges, so it works under the
+unit's `DynamicUser=yes` sandbox.
+
+**Opt-out.** Create either marker file; both are checked by `ConditionPathExists=!` on the unit and
+again by the script before any state is written, so opting out leaves no trace:
+
+```bash
+sudo mkdir -p /etc/projectbluefin/countme && sudo touch /etc/projectbluefin/countme/disabled
+# legacy path, still honored:
+sudo mkdir -p /etc/dakota-countme && sudo touch /etc/dakota-countme/disabled
+```
+
+**Unit-name collision with Dakota.** Dakota historically shipped its own `bluefin-countme.timer`
+driving `/usr/libexec/dakota-countme` (Fedora metalink, `dakota-countme-epoch` cookie). That unit
+name is now owned family-wide by the shared first-party reporter, so on Dakota the two definitions
+collide in `/usr/lib/systemd/system` and only one survives the build. Dakota's Fedora-targeting
+reporter must be renamed (e.g. `dakota-countme.timer`) to keep both; until then, treat
+`bluefin-countme.*` in this repository as the authoritative definition.
+
+### Upstream Fedora reporting
+
 - **Bluefin & Bluefin LTS:** Handled by standard repository configuration, and since CentOS-based bootc images are broken with legacy rpm-ostree countme, Bluefin LTS uses a dnf-based helper service (`bluefin-lts-countme.service` running `dnf makecache`; dnf5 is unpackaged on CS10/EPEL10 and the dnf CLI is unaffected by the libdnf4 metalink-expansion bug).
-- **Dakota:** Since it is based on GNOME OS and has no standard rpm-ostree/dnf packages, it utilizes a custom weekly systemd service/timer (`bluefin-countme.timer` triggering `/usr/libexec/dakota-countme`).
+- **Dakota:** Since it is based on GNOME OS and has no standard rpm-ostree/dnf packages, it utilizes a custom weekly systemd service/timer running `/usr/libexec/dakota-countme`.
   - It generates and maintains an installation epoch cookie in `/var/lib/dakota-countme-epoch` to mimic Fedora's week-based age buckets.
   - It performs a weekly query to Fedora's metalink using a `libdnf5`-format User Agent with `os_name="Dakota"` (e.g. `libdnf5/5.2.9 (Dakota;${VERSION_ID};${ARCH}) hawkey`).
 

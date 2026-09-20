@@ -19,7 +19,10 @@ STATE_DIR="${STATE_DIRECTORY:-/var/lib/bluefin-countme}"
 ENDPOINT="${COUNTME_ENDPOINT:-https://countme.projectbluefin.io/metalink}"
 
 # Opt-out. Checked before any state is written, so opting out leaves no trace.
-for marker in /etc/projectbluefin/countme/disabled /etc/dakota-countme/disabled; do
+# The unit checks the same two paths with ConditionPathExists=!; they are checked
+# again here so the script is safe to run by hand. CONFIG_ROOT is a test hook.
+CONFIG_ROOT="${COUNTME_CONFIG_ROOT:-}"
+for marker in "${CONFIG_ROOT}/etc/projectbluefin/countme/disabled" "${CONFIG_ROOT}/etc/dakota-countme/disabled"; do
     if [[ -e "$marker" ]]; then
         echo "countme disabled by ${marker}"
         exit 0
@@ -75,38 +78,61 @@ json_field() {
     jq -r --arg k "$1" '.[$k] // empty' < "$IMAGE_INFO_FILE" 2>/dev/null || true
 }
 
+# '/' is rejected too: a value containing one is a mis-parsed registry ref
+# (registry:5000/img), not a name or a tag.
 sane() {
     local value=$1
-    [[ -n "$value" && "$value" != "null" && "$value" != *'$'* && "$value" != *' '* ]]
+    [[ -n "$value" && "$value" != "null" && "$value" != *'$'* && "$value" != *' '* && "$value" != */* ]]
 }
 
 IMAGE_NAME=$(json_field image-name)
-IMAGE_TAG=$(json_field image-tag)
 IMAGE_FLAVOR=$(json_field image-flavor)
 ARCH=$(uname -m)
 
 # What this system actually booted. Authoritative for the tag, and the fallback
 # for the name: image-info.json is a ublue convention and not every image in the
 # family ships one, but every bootc system knows its own ref.
-BOOTED_REF=$(bootc status --json 2>/dev/null |
-    jq -r '.status.booted.image.image.image // .spec.image.image // empty' 2>/dev/null || true)
+#
+# `bootc status` is a read-only query and needs no privileges, so it works under
+# this unit's DynamicUser sandbox. If it fails anyway the failure is logged with
+# its own diagnostics rather than swallowed: a silent fallback here is what makes
+# every system report the compose-time tag.
+BOOTED_REF=""
+if bootc_status=$(bootc status --json 2>&1); then
+    BOOTED_REF=$(printf '%s' "$bootc_status" |
+        jq -r '.status.booted.image.image.image // .spec.image.image // empty' 2>/dev/null || true)
+    if [[ -z "$BOOTED_REF" ]]; then
+        echo "bootc reported no booted image ref" >&2
+    fi
+else
+    printf 'bootc status failed, booted image ref unavailable: %s\n' "$bootc_status" >&2
+fi
 
 # ghcr.io/projectbluefin/bluefin-lts:stable -> bluefin-lts + stable
-#   digest-pinned refs carry no tag, so only the name is taken.
+#   Split the final path component only, so a registry port (registry:5000/img)
+#   is never mistaken for a tag. Digest-pinned refs carry no tag, so only the
+#   name is taken.
 REF_NAME=""
 REF_TAG=""
 if [[ -n "$BOOTED_REF" ]]; then
     ref_body="${BOOTED_REF%@*}"
-    case "$ref_body" in
-        */*:*) REF_TAG="${ref_body##*:}"; ref_body="${ref_body%:*}" ;;
-        *:*)   REF_TAG="${ref_body##*:}"; ref_body="${ref_body%:*}" ;;
-    esac
-    REF_NAME="${ref_body##*/}"
+    ref_leaf="${ref_body##*/}"
+    if [[ "$ref_leaf" == *:* ]]; then
+        REF_TAG="${ref_leaf##*:}"
+        ref_leaf="${ref_leaf%:*}"
+    fi
+    REF_NAME="$ref_leaf"
 fi
 
-# The baked image-tag is the compose-time tag ("latest"); promotion retags the
-# same digest, so the tag a system actually follows only exists in bootc.
+# The tag comes from bootc or not at all. The baked image-tag is the compose-time
+# tag ("latest"); promotion retags the same digest, so the tag a system actually
+# follows only exists in bootc, and falling back to the baked one would report
+# "latest" for the whole fleet — the defect this reporter exists to avoid.
+IMAGE_TAG=""
 sane "$REF_TAG" && IMAGE_TAG="$REF_TAG"
+if [[ -z "$IMAGE_TAG" ]]; then
+    echo "no usable image tag from bootc, reporting without one" >&2
+fi
 
 # image-name is the count. Prefer the declared name, fall back to the booted
 # ref, and report nothing rather than guess — a guess lands in the wrong image's
