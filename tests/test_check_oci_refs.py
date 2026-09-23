@@ -226,21 +226,17 @@ class TestTagExistsInGhcr:
             with pytest.raises(urllib.error.HTTPError):
                 tag_exists_in_ghcr("bluefin", "stable")
 
-    def test_401_returns_none_instead_of_failing_the_guard(self):
-        """401 is a token-capability answer, not a ref verdict.
-
-        GET /orgs/{org}/packages/container/{name}/versions rejects the Actions
-        GITHUB_TOKEN with 401 no matter which ref is asked about, so raising
-        here would report a token scope problem as a missing image ref.
-        """
+    def test_401_raises_http_error(self):
+        """401 is an authentication error and must raise immediately rather than retry."""
         with patch(
             "urllib.request.urlopen",
             side_effect=urllib.error.HTTPError(
                 url="", code=401, msg="Unauthorized", hdrs=None, fp=None
             ),
-        ) as mock_urlopen, patch("time.sleep"):
-            assert tag_exists_in_ghcr("bluefin", "stable") is None
-            assert mock_urlopen.call_count == 4
+        ) as mock_urlopen:
+            with pytest.raises(urllib.error.HTTPError):
+                tag_exists_in_ghcr("bluefin", "stable")
+            assert mock_urlopen.call_count == 1
 
     def test_transient_5xx_retries_then_returns_none(self):
         with patch(
