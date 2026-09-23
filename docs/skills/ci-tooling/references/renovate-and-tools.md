@@ -9,7 +9,7 @@ Part of [ci-tooling](../SKILL.md) — Renovate OCI digest tracking, Trivy scan-i
 `Containerfile` has two OCI image pins tracked by Renovate:
 
 1. `docker.io/library/alpine:latest@sha256:...` via Renovate's built-in `dockerfile` manager
-2. `ghcr.io/ublue-os/bluefin-wallpapers-gnome:latest@sha256:...` via a custom regex manager in `.github/renovate.json5`
+2. `ghcr.io/ublue-os/bluefin-wallpapers-gnome:latest@sha256:...` via a custom regex manager in `renovate.json`
 
 ### Why both managers exist
 
@@ -18,7 +18,7 @@ Part of [ci-tooling](../SKILL.md) — Renovate OCI digest tracking, Trivy scan-i
 
 ### Rule when adding OCI pins
 
-If you add new OCI image pins to `Containerfile`, also update `.github/renovate.json5` so Renovate can keep them current. Applies to both `FROM` and `COPY --from=` references. An untracked pin silently goes stale.
+If you add new OCI image pins to `Containerfile`, also update `renovate.json` so Renovate can keep them current. Applies to both `FROM` and `COPY --from=` references. An untracked pin silently goes stale.
 
 ### Org-wide Renovate runner
 
@@ -131,14 +131,14 @@ SC2207 (arrays from command output) is suppressed globally in the shellcheck ste
 
 ## Renovate versioned-binary tracking
 
-`.github/renovate.json5` tracks versioned binaries downloaded in the build stage via custom regex managers:
+`renovate.json` tracks versioned binaries downloaded in the build stage via custom regex managers:
 
 | Binary | Source | Renovate pattern |
 |---|---|---|
 | `bonedigger` | `projectbluefin/bonedigger` GitHub releases | `BONEDIGGER_VERSION` in `system_files/bluefin/usr/share/ublue-os/just/60-bonedigger.just` |
 | `opentabletdriver` | `OpenTabletDriver/OpenTabletDriver` GitHub releases | `OTD_RELEASE="v…"` in `system_files/shared/usr/share/ublue-os/just/apps.just` |
 
-When adding a new binary pinned to a specific version in a script or just file, add a corresponding regex manager entry in `renovate.json5` so the version stays current automatically.
+When adding a new binary pinned to a specific version in a script or just file, add a corresponding regex manager entry in `renovate.json` so the version stays current automatically.
 
 ### Pinned release fetches with sha256 verification (projectbluefin/common#1170)
 
