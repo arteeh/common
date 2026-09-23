@@ -70,3 +70,6 @@ Full layer validation (the `common` behave suite from
 - [`docs/contributing/agent-lane-throttle.md`](docs/contributing/agent-lane-throttle.md) —
   draft proposal for demand-side throttling of agent-filed PRs under review
   backlog; unadopted until a maintainer decision.
+- [`ACTIONS-SECURITY.md`](./ACTIONS-SECURITY.md) — organization GitHub Actions
+  security baseline: top-level `permissions: {}`, SHA pinning,
+  `pull_request_target` restrictions, and checksum verification.
