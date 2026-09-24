@@ -40,7 +40,6 @@ setup() {
         "${ROOT}/system_files/bluefin/usr/share/ublue-os/just/system.just" > "${SYSTEM_JUST}"
     _extract_recipe "${SYSTEM_JUST}" setup-vms > "${WORKDIR}/setup-vms.sh"
     _extract_recipe "${SYSTEM_JUST}" setup-lima > "${WORKDIR}/setup-lima.sh"
-    _extract_recipe "${SYSTEM_JUST}" setup-incus > "${WORKDIR}/setup-incus.sh"
     export IMAGE_INFO_FILE="${WORKDIR}/image-info.json"
     printf '{"image-tag":"stable","image-ref":"ostree-image-signed:docker://ghcr.io/projectbluefin/bluefin"}' > "${IMAGE_INFO_FILE}"
 
@@ -57,8 +56,6 @@ if [[ "$1" == "--justfile" && "$2" == "${SYSTEM_JUST}" ]]; then
         exec bash "${WORKDIR}/setup-vms.sh"
     elif [[ "$3" == "setup-lima" ]]; then
         exec bash "${WORKDIR}/setup-lima.sh"
-    elif [[ "$3" == "setup-incus" ]]; then
-        exec bash "${WORKDIR}/setup-incus.sh"
     fi
 fi
 exit 99
@@ -278,13 +275,6 @@ assert idx_inc != -1 and idx_host != -1 and idx_inc < idx_host
     grep -q 'limactl start --name ubuntu --mount-writable --tty=false template:ubuntu-lts' "${COMMAND_LOG}"
     grep -q 'limactl autostart enable ubuntu' "${COMMAND_LOG}"
     grep -q 'limactl shell ubuntu true' "${COMMAND_LOG}"
-}
-
-@test "native setup-incus: installs incus and adds user to incus-admin group" {
-    _run_recipe "${SYSTEM_JUST}" setup-incus
-    [ "${status}" -eq 0 ]
-    grep -qFx 'brew install incus' "${COMMAND_LOG}"
-    grep -q 'usermod -aG incus-admin ' "${COMMAND_LOG}"
 }
 
 @test "native install-system-flatpaks: confirmation is required by default" {

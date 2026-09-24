@@ -371,21 +371,6 @@ setup-lima:
     echo "  3. Open your project folder (\$HOME is mounted writable inside the VM)."
     echo "  4. In projects with devcontainers, VS Code will offer 'Reopen in Container'."
 
-# Set up incus system containers
-[group('System')]
-setup-incus:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    brew install incus
-    CURRENT_USER="$(id -un)"
-    pkexec bash -c "
-        if ! grep -q '^incus-admin:' /etc/group 2>/dev/null; then
-            grep '^incus-admin:' /usr/lib/group 2>/dev/null | tee -a /etc/group > /dev/null || true
-        fi
-        usermod -aG incus-admin ${CURRENT_USER} 2>/dev/null || true
-    "
-    echo "incus installed. Reboot or log back in to apply group changes."
-
 # Install system flatpaks
 [group('System')]
 install-system-flatpaks $confirm="1":
