@@ -127,21 +127,40 @@ def test_bonedigger_custom_regex_manager():
     assert match_found, "Bonedigger regex pattern did not match 60-bonedigger.just content"
 
 
-def test_stale_github_actions_automerge_not_reintroduced():
-    """Verify that stale GitHub Actions minor/patch automerge from the inert file was not reintroduced."""
+def test_automerge_policy_is_single_explicit_repo_wide_rule():
+    """Pin down the automerge policy so it cannot drift back to an implicit per-manager carve-out.
+
+    The inert .github/renovate.json5 automerged github-actions minor/patch updates via
+    {"automerge": true, "matchManagers": ["github-actions"],
+     "matchUpdateTypes": ["minor", "patch"]}.
+
+    The root config supersedes that with a single unfiltered rule covering
+    digest/pin/patch/minor for every manager, so github-actions minor/patch updates still
+    automerge - deliberately and repo-wide, not as a leftover manager-specific exception.
+    Any change to that policy (extra automerge rules, manager filters, or different update
+    types) must be a conscious edit here as well.
+    """
     config = _load_config()
     package_rules = config.get("packageRules", [])
 
-    # Inactive .github/renovate.json5 had:
-    # { "automerge": true, "matchManagers": ["github-actions"], "matchUpdateTypes": ["minor", "patch"] }
-    # This must not be present in renovate.json.
-    for rule in package_rules:
-        if rule.get("matchManagers") == ["github-actions"]:
-            update_types = set(rule.get("matchUpdateTypes", []))
-            if update_types.intersection({"minor", "patch"}):
-                assert rule.get("automerge") is not True, (
-                    "Stale github-actions minor/patch automerge rule must not be reintroduced"
-                )
+    automerge_rules = [rule for rule in package_rules if rule.get("automerge") is True]
+    assert len(automerge_rules) == 1, (
+        "Expected exactly one automerge rule in renovate.json; found "
+        f"{len(automerge_rules)}. Automerge policy must stay in a single explicit rule."
+    )
+
+    rule = automerge_rules[0]
+    assert "matchManagers" not in rule, (
+        "The automerge rule must not filter by manager; per-manager automerge carve-outs "
+        "(such as the stale github-actions rule from .github/renovate.json5) are not the policy."
+    )
+    assert set(rule.get("matchUpdateTypes", [])) == {"digest", "pin", "patch", "minor"}, (
+        "Automerge is intended for digest/pin/patch/minor updates only; major updates "
+        "must stay manual."
+    )
+    assert rule.get("platformAutomerge") is True, (
+        "platformAutomerge must stay enabled so GitHub native auto-merge feeds the merge queue."
+    )
 
 
 def test_opentabletdriver_custom_regex_manager():
