@@ -321,7 +321,7 @@ setup-lima:
     # 2. brew install lima (pulls qemu automatically as a dependency)
     brew install lima
 
-    # 3. Wire ~/.ssh/config — prepend "Include ~/.lima/*/ssh.config" before any Host * or Match blocks; chmod 700 ~/.ssh, chmod 600 ~/.ssh/config
+    # 3. Wire ~/.ssh/config — prepend "Include ~/.lima/*/ssh.config" before any Host or Match blocks; chmod 700 ~/.ssh, chmod 600 ~/.ssh/config
     mkdir -p "${HOME}/.ssh"
     chmod 700 "${HOME}/.ssh"
     SSH_CONFIG="${HOME}/.ssh/config"
@@ -329,7 +329,7 @@ setup-lima:
     chmod 600 "${SSH_CONFIG}"
 
     if ! grep -qF "Include ~/.lima/*/ssh.config" "${SSH_CONFIG}"; then
-        FIRST_MATCH_LINE="$(grep -nE '^[[:space:]]*(Host[[:space:]]+\*|Match[[:space:]]+)' "${SSH_CONFIG}" 2>/dev/null | head -n1 | cut -d: -f1 || true)"
+        FIRST_MATCH_LINE="$(grep -nE '^[[:space:]]*(Host|Match)[[:space:]]+' "${SSH_CONFIG}" 2>/dev/null | head -n1 | cut -d: -f1 || true)"
         if [ -n "${FIRST_MATCH_LINE}" ]; then
             sed -i "${FIRST_MATCH_LINE}i Include ~/.lima/*/ssh.config\n" "${SSH_CONFIG}"
         else

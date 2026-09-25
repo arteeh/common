@@ -253,6 +253,8 @@ CHANNELS
     chmod 666 "${fake_kvm}"
     mkdir -p "${HOME}/.ssh"
     printf 'Host myhost\n    HostName 1.2.3.4\nHost *\n    IdentityFile ~/.ssh/id_rsa\n' > "${HOME}/.ssh/config"
+    mkdir -p "${HOME}/.lima/ubuntu"
+    printf 'Host lima-ubuntu\n    Hostname 127.0.0.1\n    Port 60022\n' > "${HOME}/.lima/ubuntu/ssh.config"
 
     KVM_PATH="${fake_kvm}" _run_recipe "${SYSTEM_JUST}" setup-lima
     [ "${status}" -eq 0 ]
@@ -260,16 +262,24 @@ CHANNELS
     # Verify brew install
     grep -qFx 'brew install lima' "${COMMAND_LOG}"
 
-    # Verify ssh config wired before Host *
+    # Verify ssh config wired before the first Host block
     grep -qF 'Include ~/.lima/*/ssh.config' "${HOME}/.ssh/config"
     run python3 -c '
 with open("'"${HOME}"'/.ssh/config") as f:
     content = f.read()
 idx_inc = content.find("Include ~/.lima/*/ssh.config")
-idx_host = content.find("Host *")
-assert idx_inc != -1 and idx_host != -1 and idx_inc < idx_host
+idx_first_host = content.find("Host myhost")
+idx_host_star = content.find("Host *")
+assert idx_inc != -1 and idx_first_host != -1 and idx_host_star != -1
+assert idx_inc < idx_first_host < idx_host_star
 '
     [ "${status}" -eq 0 ]
+
+    # Verify ssh resolves lima-ubuntu correctly using the included configuration
+    run ssh -F "${HOME}/.ssh/config" -G lima-ubuntu
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"hostname 127.0.0.1"* ]]
+    [[ "${output}" == *"port 60022"* ]]
 
     # Verify limactl commands
     grep -q 'limactl start --name ubuntu --mount-writable --tty=false template:ubuntu-lts' "${COMMAND_LOG}"
