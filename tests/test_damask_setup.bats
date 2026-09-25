@@ -94,8 +94,11 @@ teardown() {
     run bash "${PATCHED_HOOK}"
     [ "${status}" -eq 0 ]
 
-    # systemctl should only have been called once
-    [ "$(wc -l < "${WORKDIR}/systemctl.log")" -eq 1 ]
+    # The hook body must not run again: exactly one enable, and no second
+    # unit-file probe. Counting every logged call would also count the
+    # list-unit-files probe the first run makes.
+    [ "$(grep -c -x -- "--user enable damask.service" "${WORKDIR}/systemctl.log")" -eq 1 ]
+    [ "$(grep -c -x -- "--user list-unit-files damask.service" "${WORKDIR}/systemctl.log")" -eq 1 ]
 
     # user modification should still be present
     grep -qx "# user modified" "${keyfile}"
@@ -136,4 +139,3 @@ EXISTING
     grep -q -- "list-unit-files damask.service" "${WORKDIR}/systemctl.log"
     ! grep -q -- "--user enable damask.service" "${WORKDIR}/systemctl.log"
 }
-
