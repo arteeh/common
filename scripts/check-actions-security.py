@@ -64,14 +64,28 @@ def check_workflow_file(path: Path) -> List[SecurityIssue]:
 
     # 1. Check top-level permissions
     has_top_level_perms = False
+    top_level_perm_issues: List[str] = []
     if workflow_data is not None and isinstance(workflow_data, dict):
         if "permissions" in workflow_data and workflow_data["permissions"] is not None:
             has_top_level_perms = True
+            perms = workflow_data["permissions"]
+            if perms == "write-all":
+                top_level_perm_issues.append(
+                    "Top-level 'permissions: write-all' is forbidden. "
+                    "Baseline requires fail-closed top-level permissions (e.g. 'permissions: {}' or explicit scoped permissions)."
+                )
     else:
         # Fallback line-based check: look for top-level permissions: at col 0
         for line in lines:
-            if re.match(r"^permissions:\s*", line):
+            m_top = re.match(r"^permissions:\s*(.*)", line)
+            if m_top:
                 has_top_level_perms = True
+                val = m_top.group(1).strip()
+                if val == "write-all":
+                    top_level_perm_issues.append(
+                        "Top-level 'permissions: write-all' is forbidden. "
+                        "Baseline requires fail-closed top-level permissions (e.g. 'permissions: {}' or explicit scoped permissions)."
+                    )
                 break
 
     if not has_top_level_perms:
@@ -84,6 +98,8 @@ def check_workflow_file(path: Path) -> List[SecurityIssue]:
                 "to fail closed on unconfigured jobs.",
             )
         )
+    for issue_msg in top_level_perm_issues:
+        issues.append(SecurityIssue(str(path), None, issue_msg))
 
     # 2. Check uses: pinning and version comments
     for i, line in enumerate(lines, 1):

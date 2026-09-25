@@ -116,9 +116,9 @@ All internal workflow references within the `projectbluefin` organization (`proj
 3. **No Unmerged PR Refs:** Workflows must NEVER reference unmerged PR head commits (`refs/pull/*/head`) or ephemeral branch tips (`aa318556... # clanker-queue-rollout`). Reusable workflows must resolve to stable release tags (`@v1`) or the upstream default branch (`@main`).
 
 #### Automated Maintenance with Renovate
-Renovate tracks pinned action SHAs across all organization repositories. As defined in `renovate.json`:
+Renovate tracks pinned action SHAs across organization repositories. As policy targets:
 - Digest and pin updates are tracked and verified continuously.
-- Minor and patch action updates require human review and green CI checks before merging (`common#1074`, `common#1146`).
+- Restricting minor and patch action updates to require human review and disabling automated merge is the intended security policy, tracked in `common#1074` and implemented in `common#1146`.
 
 ---
 
@@ -127,7 +127,7 @@ Renovate tracks pinned action SHAs across all organization repositories. As defi
 **Requirement:** Workflows triggered by `pull_request_target` must never check out or execute untrusted code from pull request forks within a privileged runner context.
 
 #### Threat Model & Rationale
-Unlike `pull_request`, the `pull_request_target` event runs in the context of the base repository (e.g. `main`), giving the runner access to repository secrets and a read/write `GITHUB_TOKEN`. Checking out untrusted PR head code (`actions/checkout` with `ref: ${{ github.event.pull_request.head.sha }}`) and running build commands, npm scripts, tests, or linters allows an untrusted fork author to execute arbitrary code with direct access to repository secrets and write tokens.
+Unlike `pull_request` from forks, the `pull_request_target` event runs in the context of the base repository (e.g. `main`), giving the runner access to repository secrets and a read/write `GITHUB_TOKEN`. Checking out untrusted PR head code (`actions/checkout` with `ref: ${{ github.event.pull_request.head.sha }}`) and running build commands, npm scripts, tests, or linters allows an untrusted fork author to execute arbitrary code with direct access to repository secrets and write tokens.
 
 #### Mandatory Restrictions
 1. **Zero Untrusted Execution:** Workflows triggered by `pull_request_target` MUST NOT execute untrusted scripts, build recipes (`just`, `make`, `Containerfile`), or package lifecycle scripts from the PR branch.
@@ -136,7 +136,7 @@ Unlike `pull_request`, the `pull_request_target` event runs in the context of th
    - Milestone and project card assignment
    - PR title validation (Conventional Commits)
    - Automated routing and bot notifications
-3. **Separation of Privileges:** Workflows executing tests, image builds, or compilation must run under the unprivileged `pull_request` event (which has no access to repository secrets and runs with read-only tokens). If a post-test privileged step is required (e.g. uploading results or publishing to a registry), use safe event separation (such as `workflow_run`) with strictly validated artifacts.
+3. **Separation of Privileges:** Workflows executing tests, image builds, or compilation must run under the `pull_request` event (where PRs from forks have no access to repository secrets and run with read-only tokens). If a post-test privileged step is required (e.g. uploading results or publishing to a registry), use safe event separation (such as `workflow_run`) with strictly validated artifacts.
 
 ---
 
@@ -181,7 +181,7 @@ To ensure new and existing repositories remain compliant with this baseline:
    - `.pre-commit-config.yaml` runs `no-floating-action-tags` to prevent unpinned external action tags from being committed.
    - `scripts/check-actions-security.py` verifies top-level permissions declarations and action pinning.
 2. **Automated CI Validation:**
-   - `validate.yml` runs `pre-commit run --all-files` and `pytest tests/test_actions_security.py` on all pull requests.
+   - `validate.yml` runs `pre-commit run --all-files` on all pull requests, calling `scripts/check-actions-security.py`. Conformance unit tests run in local and CI test recipes via `Justfile` (`just test`).
 3. **Cross-Repo Scanner:**
    - The shared script `scripts/check-actions-security.py` is available for inclusion in all repository CI lanes and scanner audits.
 
@@ -195,8 +195,8 @@ To ensure new and existing repositories remain compliant with this baseline:
 | [common#969](https://github.com/projectbluefin/common/pull/969) | `common` | Pillar 1: Permissions | Added top-level `permissions: {}` to `e2e.yml`, `pr-e2e.yml`, and `promotion-candidate-e2e.yml`. |
 | [bluefin-lts#505](https://github.com/projectbluefin/bluefin-lts/pull/505) | `bluefin-lts` | Pillar 1: Permissions | Scoped `pr-testsuite.yml` permissions block. |
 | [bluefin-lts#511](https://github.com/projectbluefin/bluefin-lts/pull/511) | `bluefin-lts` | Pillar 1: Permissions | Added top-level `permissions: {}` to `pr-e2e.yml`. |
-| [dakota-iso#124](https://github.com/projectbluefin/dakota-iso/pull/124) | `dakota-iso` | Pillar 1: Permissions | Added explicit permissions block to `test.yml`. |
-| [dakota-iso#125](https://github.com/projectbluefin/dakota-iso/pull/125) | `dakota-iso` | Pillar 2: SHA Pinning | Pinned `action-shellcheck` SHA and scoped permissions. |
-| [dakota-iso#126](https://github.com/projectbluefin/dakota-iso/pull/126) | `dakota-iso` | Pillar 2: Trust Model | Clarified `@v1` managed tag policy for internal reusable workflows. |
-| [dakota-iso#130](https://github.com/projectbluefin/dakota-iso/pull/130) | `dakota-iso` | Pillar 1: Permissions | Declared top-level `permissions: {}` in `build-iso-bluefin`. |
+| [dakota-iso#189](https://github.com/projectbluefin/dakota-iso/pull/189) | `dakota-iso` | Pillar 1: Permissions | Added explicit permissions block to `test.yml` (replacing closed #124). |
+| [dakota-iso#190](https://github.com/projectbluefin/dakota-iso/pull/190) | `dakota-iso` | Pillar 2: SHA Pinning | Pinned `action-shellcheck` SHA and scoped permissions (replacing closed #125). |
+| [dakota-iso#169](https://github.com/projectbluefin/dakota-iso/pull/169) | `dakota-iso` | Pillar 2: Trust Model | Clarified `@v1` managed tag policy for internal reusable workflows (replacing closed #126). |
+| [dakota-iso#206](https://github.com/projectbluefin/dakota-iso/pull/206) | `dakota-iso` | Pillar 1: Permissions | Declared top-level `permissions: {}` in `build-iso-bluefin` (replacing closed #130). |
 | [actions#434](https://github.com/projectbluefin/actions/pull/434) | `actions` | Pillar 4: Checksums | Added SHA-256 verification and exact cache keys to `install-cosign`. |

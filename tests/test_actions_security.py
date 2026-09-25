@@ -109,3 +109,26 @@ jobs:
     )
     assert result.returncode != 0
     assert "Dangerous untrusted PR checkout detected" in result.stdout
+
+
+def test_scanner_detects_forbidden_top_level_write_permissions(tmp_path: Path):
+    """The scanner must flag top-level write-all or write scope permissions."""
+    wf = tmp_path / "write-all.yml"
+    wf.write_text("""
+name: Write All Workflow
+on: [push]
+permissions: write-all
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+""")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--workflows-dir", str(tmp_path), "--strict"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "forbidden" in result.stdout.lower() or "violates" in result.stdout.lower()
+
