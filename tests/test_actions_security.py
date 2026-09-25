@@ -131,4 +131,3 @@ jobs:
     )
     assert result.returncode != 0
     assert "forbidden" in result.stdout.lower() or "violates" in result.stdout.lower()
-
