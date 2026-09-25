@@ -39,8 +39,13 @@ jobs:
 
       - name: Install test deps
         run: |
-          sudo apt-get install -y bats fish zsh just
+          sudo apt-get install -y bats fish zsh
           pip install pytest pytest-cov pyyaml jsonschema
+
+      - name: Install just
+        uses: taiki-e/install-action@1a85bbbe6e8628d43d225ac830981df21a8567d2 # just
+        with:
+          tool: just
 
       - name: Run shellcheck — extensionless scripts
         run: |
