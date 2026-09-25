@@ -50,7 +50,7 @@ whoever remembers to add it.
   which runs in
   [`.github/workflows/unit-tests.yml`](../.github/workflows/unit-tests.yml) on
   pull requests that touch `tests/`, `system_files/`,
-  `scripts/validate-brewfiles.sh`, or the `Justfile` (that workflow's `paths`
+  `scripts/`, the `Justfile`, or the workflow itself (that workflow's `paths`
   filter). Adding or renaming a suite means editing the runner and the gate
   together — the gate failing is the signal that you forgot one of them.
 - **Never reference a suite that does not exist.** A dangling runner line makes
