@@ -31,15 +31,17 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Install test deps
+      - name: Set up Homebrew environment and test dependencies
         run: |
-          sudo apt-get install -y bats fish zsh
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          echo "$(/home/linuxbrew/.linuxbrew/bin/brew --prefix)/bin" >> "$GITHUB_PATH"
+          brew install bats-core fish zsh
           pip install pytest pytest-cov pyyaml jsonschema
 
       - name: Install just
