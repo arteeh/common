@@ -39,27 +39,8 @@ jobs:
 
       - name: Install test deps
         run: |
-          sudo apt-get install -y bats fish zsh
+          sudo apt-get install -y bats fish zsh just
           pip install pytest pytest-cov pyyaml jsonschema
-
-      - name: Install just
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if command -v just >/dev/null 2>&1; then
-            echo "just is already installed"
-            just --version
-            exit 0
-          fi
-
-          if ! command -v cargo >/dev/null 2>&1; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-          fi
-
-          source "$HOME/.cargo/env"
-          cargo install --locked just
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Run shellcheck — extensionless scripts
         run: |
