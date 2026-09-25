@@ -14,12 +14,15 @@ setup() {
     WORKDIR="$(mktemp -d)"
     mkdir -p "${WORKDIR}/bin" "${WORKDIR}/home"
 
-    # Exit codes the mocks below read, so a test can make dependencies fail.
     echo 0 > "${WORKDIR}/systemctl.rc"
+    echo 0 > "${WORKDIR}/systemctl-list.rc"
 
     cat > "${WORKDIR}/bin/systemctl" << MOCK
 #!/bin/bash
 echo "\$*" >> "${WORKDIR}/systemctl.log"
+if [[ "\$*" == *"list-unit-files damask.service"* ]]; then
+    exit "\$(cat "${WORKDIR}/systemctl-list.rc" 2>/dev/null || echo 0)"
+fi
 exit "\$(cat "${WORKDIR}/systemctl.rc")"
 MOCK
     chmod +x "${WORKDIR}/bin/systemctl"
@@ -123,3 +126,14 @@ EXISTING
     run bash "${PATCHED_HOOK}"
     [ "${status}" -ne 0 ]
 }
+
+@test "25-damask-setup: gracefully skips enable if damask.service does not exist" {
+    echo 1 > "${WORKDIR}/systemctl-list.rc"
+
+    run bash "${PATCHED_HOOK}"
+    [ "${status}" -eq 0 ]
+
+    grep -q -- "list-unit-files damask.service" "${WORKDIR}/systemctl.log"
+    ! grep -q -- "--user enable damask.service" "${WORKDIR}/systemctl.log"
+}
+

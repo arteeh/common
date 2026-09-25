@@ -26,4 +26,6 @@ EOF
 	chmod 0644 "${KEYFILE}"
 fi
 
-systemctl --user enable damask.service
+if systemctl --user list-unit-files damask.service &>/dev/null; then
+	systemctl --user enable damask.service
+fi
