@@ -111,13 +111,12 @@ kubestellar-bot does NOT make design or security decisions. Those hit a human ga
 
 ## Integration status
 
-The factory previously had two lifecycle workflow paths serving different
-purposes, both in `bonedigger`'s `.github/workflows/lifecycle.yml`:
+The factory callers share one reusable bonedigger lifecycle workflow with
+several responsibilities:
 
 | Workflow | Location | Called by | Purpose |
 |---|---|---|---|
-| ujust-report intake | `projectbluefin/bonedigger/.github/workflows/lifecycle.yml` (removed from `main`; retained at each caller's pinned SHA) | `bluefin`, `bluefin-lts`, `dakota`, `knuckle` via `bonedigger.yml` | Report detection and confirmation tracking |
-| bonedigger slim | `projectbluefin/bonedigger/.github/workflows/lifecycle.yml` (removed from `main`; retained at each caller's pinned SHA) | `bluefin`, `bluefin-lts`, `dakota`, `knuckle` via `bonedigger.yml` | Agent donation fast-track, ujust-report intake |
+| bonedigger slim | `projectbluefin/bonedigger/.github/workflows/lifecycle.yml` (removed from `main`; retained at each caller's pinned SHA) | `bluefin`, `bluefin-lts`, `dakota`, `knuckle` via `bonedigger.yml` | ujust-report intake, confirmation tracking and priority escalation, agent donation fast-track |
 
 `bonedigger#40` (2026-09-29) deleted `lifecycle.yml` from `main`; issue lifecycle
 is now Hive-managed across the factory. The `bonedigger.yml` callers above are
