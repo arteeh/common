@@ -144,6 +144,12 @@ under `/etc` or `~/.config` so they survive image updates. Set
 `modules.flatpak.disable` to `false` or remove it to return Flatpak updates to
 the normal `uupd.timer` schedule.
 
+## Animated wallpaper
+
+To use the shipped Bluefin movie with Hidamari, follow the
+[Hidamari setup guide](docs/hidamari.md). It includes the required copy into
+your Videos folder so the Flatpak can find the movie.
+
 ## Brewfiles
 
 The `/usr/share/ublue-os/homebrew/` directory contains curated application bundles installable via [bbrew](https://github.com/Valkyrie00/homebrew-bbrew):
