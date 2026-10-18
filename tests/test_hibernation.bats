@@ -64,12 +64,13 @@ case "$name" in
     swapoff)
         [[ ${STOP_FAIL:-0} == 0 && ${SWAPOFF_FAIL:-0} == 0 ]] || exit 1
         rm -f "$WORKDIR/active" ;;
+    df) printf 'Avail\n%s\n' "${AVAIL_MIB:-102400}" ;;
     busctl) printf 's "%s"\n' "${CAPABILITY:-yes}" ;;
     chattr|restorecon|gnome-shell) ;;
 esac
 STUB
     chmod +x "$WORKDIR/driver" "$WORKDIR/bin/stub"
-    for name in findmnt btrfs mkswap systemctl swapon swapoff busctl chattr restorecon gnome-shell; do
+    for name in df findmnt btrfs mkswap systemctl swapon swapoff busctl chattr restorecon gnome-shell; do
         ln -s stub "$WORKDIR/bin/$name"
     done
     export PATH="$WORKDIR/bin:$PATH"
@@ -97,66 +98,86 @@ STUB
 @test "enable preserves idle policy and existing files; disable reverses owned resources" {
     mkdir -p "$WORKDIR/etc/systemd/logind.conf.d"
     echo admin > "$WORKDIR/etc/systemd/logind.conf.d/lid.conf"
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
     run "$WORKDIR/driver" status
     [ "$output" = enabled ]
     grep -q 'HandleLidSwitch=suspend-then-hibernate' "$WORKDIR/etc/systemd/logind.conf.d/60-bluefin-hibernation.conf"
     ! grep -R -E 'IdleAction|HandlePowerKey|IgnoreInhibited|gsettings|uupd' "$WORKDIR/etc"
     grep -q 'systemd-sleep suspend-then-hibernate' "$WORKDIR/etc/systemd/system/systemd-suspend.service.d/60-bluefin-hibernation.conf"
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
     [ "$(grep -c 'btrfs subvolume create' "$WORKDIR/calls")" -eq 1 ]
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -eq 0 ]
     [ ! -e "$WORKDIR/swap" ]
     [ ! -e "$WORKDIR/state" ]
     [ "$(cat "$WORKDIR/etc/systemd/logind.conf.d/lid.conf")" = admin ]
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -eq 0 ]
 }
 
 @test "existing swap directory is never adopted or deleted" {
     mkdir "$WORKDIR/swap"
     echo valuable > "$WORKDIR/swap/swapfile"
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -ne 0 ]
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -eq 0 ]
     [ "$(cat "$WORKDIR/swap/swapfile")" = valuable ]
 }
 
 @test "unsupported filesystem, kernel, EFI and resume arguments fail before mutation" {
     export FSTYPE=ext4
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -ne 0 ]
     [ ! -e "$WORKDIR/state" ]
     unset FSTYPE
     echo mem > "$WORKDIR/power"
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -ne 0 ]
     [ ! -e "$WORKDIR/state" ]
     echo 'mem disk' > "$WORKDIR/power"
     rmdir "$WORKDIR/efi"
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -ne 0 ]
     [ ! -e "$WORKDIR/state" ]
     mkdir "$WORKDIR/efi"
     echo 'quiet resume=/dev/test' > "$WORKDIR/cmdline"
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -ne 0 ]
     [ ! -e "$WORKDIR/state" ]
 }
 
+@test "insufficient free space on /var fails before mutation" {
+    # 9G swap + 4G reserve = 13312 MiB required.
+    export AVAIL_MIB=13311
+    run "$WORKDIR/driver" enable_hibernation
+    [ "$status" -ne 0 ]
+    [[ $output == *'free space'* ]]
+    [ ! -e "$WORKDIR/state" ]
+    export AVAIL_MIB=13312
+    run "$WORKDIR/driver" enable_hibernation
+    [ "$status" -eq 0 ]
+}
+
+@test "enable and help warn that the hibernation image is unencrypted without LUKS" {
+    run bash "$HELPER" help
+    [[ $output == *'LUKS'* ]]
+    run "$WORKDIR/driver" enable_hibernation
+    [ "$status" -eq 0 ]
+    [[ $output == *'unencrypted'* ]]
+}
+
 @test "existing configuration and fstab entries are refused" {
     export FSTAB_SOURCE="$WORKDIR/swap/swapfile"
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -ne 0 ]
     [ ! -e "$WORKDIR/state" ]
     unset FSTAB_SOURCE
     mkdir -p "$WORKDIR/etc/systemd/sleep.conf.d"
     echo admin > "$WORKDIR/etc/systemd/sleep.conf.d/60-bluefin-hibernation.conf"
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -ne 0 ]
     [ ! -e "$WORKDIR/state" ]
 }
@@ -164,12 +185,12 @@ STUB
 @test "allocation or Btrfs validation failure remains recoverable" {
     for failure in ALLOC_FAIL MAP_FAIL; do
         export "$failure=1"
-        run "$WORKDIR/driver" enable
+        run "$WORKDIR/driver" enable_hibernation
         [ "$status" -ne 0 ]
         [ ! -e "$WORKDIR/active" ]
         run "$WORKDIR/driver" status
         [ "$output" = incomplete ]
-        run "$WORKDIR/driver" disable
+        run "$WORKDIR/driver" disable_hibernation
         [ "$status" -eq 0 ]
         [ ! -e "$WORKDIR/swap" ]
         unset "$failure"
@@ -178,57 +199,57 @@ STUB
 
 @test "logind capability rejection leaves suspend unchanged and can be cleaned up" {
     export CAPABILITY=no
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -ne 0 ]
     [ ! -e "$WORKDIR/etc/systemd/logind.conf.d/60-bluefin-hibernation.conf" ]
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -eq 0 ]
     [ ! -e "$WORKDIR/swap" ]
 }
 
 @test "failed swap deactivation preserves swapfile and permits a later retry" {
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
     export STOP_FAIL=1
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -ne 0 ]
     [ -f "$WORKDIR/swap/swapfile" ]
     [ -f "$WORKDIR/state/owned" ]
     run "$WORKDIR/driver" status
     [ "$output" = incomplete ]
     unset STOP_FAIL
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -eq 0 ]
 }
 
 @test "direct swapoff failure without a unit file preserves swapfile" {
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
     rm "$WORKDIR/etc/systemd/system/var-swap-swapfile.swap"
     export SWAPOFF_FAIL=1
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -ne 0 ]
     grep -Fxq "swapoff $WORKDIR/swap/swapfile" "$WORKDIR/calls"
     [ -f "$WORKDIR/swap/swapfile" ]
     [ -f "$WORKDIR/state/owned" ]
     unset SWAPOFF_FAIL
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -eq 0 ]
     [ ! -e "$WORKDIR/swap" ]
 }
 
 @test "cleanup refuses additional data in the swap subvolume" {
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
     echo valuable > "$WORKDIR/swap/other"
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -ne 0 ]
     [ "$(cat "$WORKDIR/swap/other")" = valuable ]
     [ -f "$WORKDIR/swap/swapfile" ]
 }
 
 @test "status detects inactive swap and missing configuration" {
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
     rm "$WORKDIR/active"
     run "$WORKDIR/driver" status
@@ -241,21 +262,21 @@ STUB
 
 @test "non-GNOME setup skips the suspend override" {
     export NO_GNOME=1
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
     [ ! -e "$WORKDIR/state/gnome" ]
     [ ! -e "$WORKDIR/etc/systemd/system/systemd-suspend.service.d/60-bluefin-hibernation.conf" ]
     run "$WORKDIR/driver" status
     [ "$output" = enabled ]
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -eq 0 ]
 }
 
 @test "failure to inspect active swap prevents deletion" {
-    run "$WORKDIR/driver" enable
+    run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
     export SWAPON_FAIL=1
-    run "$WORKDIR/driver" disable
+    run "$WORKDIR/driver" disable_hibernation
     [ "$status" -ne 0 ]
     [ -f "$WORKDIR/swap/swapfile" ]
     [ -f "$WORKDIR/state/owned" ]

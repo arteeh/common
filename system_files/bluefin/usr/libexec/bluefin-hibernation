@@ -39,7 +39,7 @@ swap_size() {
 }
 
 preflight() {
-    local path
+    local size=$1 reserve_gib=4 path avail_mib need_mib
     for path in "$state" "$swapdir" "$unitfile" "$lid" "$sleep" "$suspend"; do
         [[ ! -e $path && ! -L $path ]] || fail "Refusing to overwrite $path."
     done
@@ -56,17 +56,28 @@ preflight() {
     [[ $(systemctl show "$unit" -p LoadState --value) == not-found ]] ||
         fail "An existing unit already manages $swapfile."
     mkswap --help | grep -- '--file' >/dev/null || fail 'mkswap with --file support is required.'
+    # Keep headroom so allocation never drives the Btrfs volume near full.
+    avail_mib=$(df --output=avail -B1M /var | awk 'NR == 2 { print $1 + 0 }')
+    need_mib=$(( (${size%G} + reserve_gib) * 1024 ))
+    (( ${avail_mib:-0} >= need_mib )) ||
+        fail "Need ${size} for swap plus ${reserve_gib}G free space on /var; only ${avail_mib:-0}M available."
 }
 
-enable() {
+unencrypted_warning() {
+    echo 'Warning: hibernation writes the full contents of RAM, including secrets, to /var/swap/swapfile.'
+    echo 'Without full-disk encryption (LUKS), that data is stored unencrypted on disk.'
+}
+
+enable_hibernation() {
     if [[ $(status) == enabled ]]; then
         echo 'Hibernation is already configured.'
         return
     fi
     [[ ! -e $state ]] || fail 'Setup is incomplete; run ujust hibernation disable before retrying.'
-    preflight
     local size
     size=$(swap_size)
+    preflight "$size"
+    unencrypted_warning
     echo "Creating a $size swapfile. Setup failures can be cleaned up with ujust hibernation disable."
     mkdir -m 755 "$state"
     # Mark ownership before creating resources, so interrupted setup is recoverable.
@@ -124,7 +135,7 @@ CONF
     echo 'Hibernation configured. Reboot to apply lid handling; save your work before testing resume.'
 }
 
-disable() {
+disable_hibernation() {
     if [[ ! -e $state ]]; then
         echo 'Hibernation is not managed by this recipe; nothing to remove.'
         return
@@ -168,6 +179,7 @@ main() {
             echo 'Usage: ujust hibernation [status|enable|disable]'
             echo 'Opt-in Btrfs/UEFI hibernation with a 60-minute suspend delay.'
             echo 'GNOME controls idle timeouts. Disable removes only recipe-managed setup.'
+            echo 'RAM contents are written to disk unencrypted unless the disk uses LUKS.'
             return ;;
         status) status; return ;;
         '')
@@ -183,7 +195,7 @@ main() {
     # Serialize setup and cleanup, including creation of the ownership marker.
     exec 9>/run/bluefin-hibernation.lock
     flock -n 9 || fail 'Another hibernation setup is running.'
-    "$action"
+    "${action}_hibernation"
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
