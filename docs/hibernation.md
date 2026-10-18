@@ -1,6 +1,6 @@
 # Opt-in hibernation
 
-`ujust hibernation [enable|disable|status]` (alias `toggle-hibernation`) calls
+`ujust hibernation [enable [--yes]|disable|status]` (alias `toggle-hibernation`) calls
 Bluefin's `/usr/libexec/bluefin-hibernation`. With no argument it prompts.
 This is opt-in: installing the image does not create swap or change sleep.
 
@@ -13,8 +13,13 @@ This is opt-in: installing the image does not create swap or change sleep.
 
 Hibernation writes the full contents of RAM — including passwords, keys, and
 open documents — to `/var/swap/swapfile`. On systems without full-disk
-encryption (LUKS), that data is stored unencrypted on disk. The helper prints
-this warning before creating the swapfile.
+encryption (LUKS), that data is stored unencrypted on disk.
+
+Before creating anything, the helper checks whether the block device behind
+`/var` sits on a dm-crypt (LUKS) mapping. If it does not, it prints a warning
+and asks for confirmation (default: no); declining leaves the system unchanged.
+For non-interactive use, `ujust hibernation enable --yes` accepts the
+unencrypted image explicitly.
 
 ## Requirements
 

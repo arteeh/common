@@ -68,6 +68,31 @@ unencrypted_warning() {
     echo 'Without full-disk encryption (LUKS), that data is stored unencrypted on disk.'
 }
 
+# True when the block device backing /var sits on a dm-crypt (LUKS) mapping.
+var_encrypted() {
+    local source types
+    source=$(findmnt -n -o SOURCE -T /var) || return 1
+    # Btrfs reports subvolumes as /dev/X[/subvol].
+    source=${source%%\[*}
+    # -s walks from the device up through its parents (dm-crypt, partition, disk).
+    types=$(lsblk -n -s -o TYPE -- "$source" 2>/dev/null) || return 1
+    grep -qx crypt <<< "$types"
+}
+
+# Require explicit consent before persisting RAM to an unencrypted disk.
+confirm_unencrypted() {
+    local assume_yes=$1
+    if var_encrypted; then
+        return
+    fi
+    unencrypted_warning
+    [[ $assume_yes != --yes ]] || return 0
+    command -v gum >/dev/null ||
+        fail 'No LUKS encryption detected under /var; rerun with --yes to accept an unencrypted hibernation image.'
+    gum confirm --default=false 'Store hibernation images unencrypted on disk?' ||
+        fail 'Aborted; no changes were made.'
+}
+
 enable_hibernation() {
     if [[ $(status) == enabled ]]; then
         echo 'Hibernation is already configured.'
@@ -77,7 +102,7 @@ enable_hibernation() {
     local size
     size=$(swap_size)
     preflight "$size"
-    unencrypted_warning
+    confirm_unencrypted "${1:-}"
     echo "Creating a $size swapfile. Setup failures can be cleaned up with ujust hibernation disable."
     mkdir -m 755 "$state"
     # Mark ownership before creating resources, so interrupted setup is recoverable.
@@ -173,13 +198,20 @@ disable_hibernation() {
 main() {
     umask 022
     init_paths
-    local action=${1:-}
+    local action=${1:-} confirm=${2:-}
+    case "$confirm" in
+        '') ;;
+        --yes) [[ $action == enable ]] || fail '--yes is only valid with enable.' ;;
+        *) fail "Unknown option: $confirm" ;;
+    esac
+    (( $# <= 2 )) || fail 'Too many arguments.'
     case "$action" in
         help|--help)
-            echo 'Usage: ujust hibernation [status|enable|disable]'
+            echo 'Usage: ujust hibernation [status|enable [--yes]|disable]'
             echo 'Opt-in Btrfs/UEFI hibernation with a 60-minute suspend delay.'
             echo 'GNOME controls idle timeouts. Disable removes only recipe-managed setup.'
             echo 'RAM contents are written to disk unencrypted unless the disk uses LUKS.'
+            echo 'Without LUKS, enable asks for confirmation; --yes accepts non-interactively.'
             return ;;
         status) status; return ;;
         '')
@@ -190,12 +222,12 @@ main() {
         *) fail "Unknown action: $action" ;;
     esac
     if (( EUID != 0 )); then
-        exec sudo /usr/libexec/bluefin-hibernation "$action"
+        exec sudo /usr/libexec/bluefin-hibernation "$action" ${confirm:+"$confirm"}
     fi
     # Serialize setup and cleanup, including creation of the ownership marker.
     exec 9>/run/bluefin-hibernation.lock
     flock -n 9 || fail 'Another hibernation setup is running.'
-    "${action}_hibernation"
+    "${action}_hibernation" ${confirm:+"$confirm"}
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

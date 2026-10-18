@@ -36,7 +36,10 @@ echo "$name $*" >> "$WORKDIR/calls"
 case "$name" in
     findmnt)
         [[ $* != *--fstab* ]] || { echo "${FSTAB_SOURCE:-}"; exit; }
+        [[ $* != *SOURCE* ]] || { echo "${VAR_SOURCE:-/dev/mapper/luks-test[/root]}"; exit; }
         echo "${FSTYPE:-btrfs}" ;;
+    lsblk) printf '%b\n' "${LSBLK_TYPES:-crypt\npart\ndisk}" ;;
+    gum) exit "${GUM_CONFIRM:-1}" ;;
     btrfs)
         case "$1 $2" in
             'subvolume create') mkdir "$3" ;;
@@ -70,7 +73,7 @@ case "$name" in
 esac
 STUB
     chmod +x "$WORKDIR/driver" "$WORKDIR/bin/stub"
-    for name in df findmnt btrfs mkswap systemctl swapon swapoff busctl chattr restorecon gnome-shell; do
+    for name in df findmnt lsblk gum btrfs mkswap systemctl swapon swapoff busctl chattr restorecon gnome-shell; do
         ln -s stub "$WORKDIR/bin/$name"
     done
     export PATH="$WORKDIR/bin:$PATH"
@@ -79,7 +82,7 @@ STUB
 @test "help and invalid actions do not call privileged tools" {
     run bash "$HELPER" help
     [ "$status" -eq 0 ]
-    [[ $output == *'status|enable|disable'* ]]
+    [[ $output == *'status|enable [--yes]|disable'* ]]
     run bash "$HELPER" 'enable; touch BAD'
     [ "$status" -ne 0 ]
     [ ! -e "$WORKDIR/calls" ]
@@ -161,12 +164,60 @@ STUB
     [ "$status" -eq 0 ]
 }
 
-@test "enable and help warn that the hibernation image is unencrypted without LUKS" {
+@test "LUKS-backed /var enables without an unencrypted-image prompt" {
     run bash "$HELPER" help
     [[ $output == *'LUKS'* ]]
     run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
+    [[ $output != *'unencrypted'* ]]
+    grep -Fxq 'lsblk -n -s -o TYPE -- /dev/mapper/luks-test' "$WORKDIR/calls"
+    run grep -q '^gum ' "$WORKDIR/calls"
+    [ "$status" -ne 0 ]
+}
+
+@test "unencrypted /var requires confirmation before any mutation" {
+    export LSBLK_TYPES='part\ndisk' VAR_SOURCE='/dev/sda3[/root]'
+    export GUM_CONFIRM=1
+    run "$WORKDIR/driver" enable_hibernation
+    [ "$status" -ne 0 ]
     [[ $output == *'unencrypted'* ]]
+    [[ $output == *'no changes'* ]]
+    [ ! -e "$WORKDIR/state" ]
+    [ ! -e "$WORKDIR/swap" ]
+    export GUM_CONFIRM=0
+    run "$WORKDIR/driver" enable_hibernation
+    [ "$status" -eq 0 ]
+    [[ $output == *'unencrypted'* ]]
+    run "$WORKDIR/driver" status
+    [ "$output" = enabled ]
+}
+
+@test "unencrypted /var accepts --yes without prompting" {
+    export LSBLK_TYPES='part\ndisk'
+    run "$WORKDIR/driver" enable_hibernation --yes
+    [ "$status" -eq 0 ]
+    [[ $output == *'unencrypted'* ]]
+    run grep -q '^gum ' "$WORKDIR/calls"
+    [ "$status" -ne 0 ]
+}
+
+@test "unencrypted /var without gum or --yes fails before mutation" {
+    export LSBLK_TYPES='part\ndisk'
+    rm "$WORKDIR/bin/gum"
+    command -v gum >/dev/null && skip 'system gum present'
+    run "$WORKDIR/driver" enable_hibernation
+    [ "$status" -ne 0 ]
+    [[ $output == *'--yes'* ]]
+    [ ! -e "$WORKDIR/state" ]
+}
+
+@test "--yes is rejected outside enable and extra arguments fail before sudo" {
+    for args in 'disable --yes' 'status --yes' 'enable --force' 'enable --yes extra'; do
+        read -ra argv <<< "$args"
+        run bash "$HELPER" "${argv[@]}"
+        [ "$status" -ne 0 ]
+    done
+    [ ! -e "$WORKDIR/calls" ]
 }
 
 @test "existing configuration and fstab entries are refused" {
@@ -284,7 +335,7 @@ STUB
 
 @test "ujust recipe and alias pass arguments literally to the helper" {
     command -v just >/dev/null || skip 'just not installed'
-    sed -n '/^alias toggle-hibernation := hibernation/,$p' \
+    sed -n '/^alias toggle-hibernation := hibernation/,/^    @\/usr\/libexec\/bluefin-hibernation /p' \
         "$BATS_TEST_DIRNAME/../system_files/bluefin/usr/share/ublue-os/just/system.just" |
         sed "s|/usr/libexec/bluefin-hibernation|$HELPER|" > "$WORKDIR/hibernation.just"
     run just --justfile "$WORKDIR/hibernation.just" toggle-hibernation help
@@ -293,4 +344,8 @@ STUB
     run just --justfile "$WORKDIR/hibernation.just" hibernation "\$(touch $WORKDIR/injected)"
     [ "$status" -ne 0 ]
     [ ! -e "$WORKDIR/injected" ]
+    run just --justfile "$WORKDIR/hibernation.just" hibernation status --yes
+    [ "$status" -ne 0 ]
+    [[ $output == *'only valid with enable'* ]]
+    [ "$(grep -c '^hibernation ' "$WORKDIR/hibernation.just")" -eq 1 ]
 }

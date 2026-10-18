@@ -482,7 +482,7 @@ check-sb-key:
 
 alias toggle-hibernation := hibernation
 
-# Configure opt-in Btrfs hibernation, preserving GNOME power timeouts (status|enable|disable)
+# Configure opt-in Btrfs hibernation, preserving GNOME power timeouts (status|enable [--yes]|disable)
 [group('System')]
-hibernation $ACTION="":
-    @/usr/libexec/bluefin-hibernation "$ACTION"
+hibernation $ACTION="" $CONFIRM="":
+    @/usr/libexec/bluefin-hibernation "$ACTION" ${CONFIRM:+"$CONFIRM"}
