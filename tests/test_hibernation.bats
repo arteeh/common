@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
     export WORKDIR="$BATS_TEST_TMPDIR"
     export HELPER="$BATS_TEST_DIRNAME/../system_files/bluefin/usr/libexec/bluefin-hibernation"
@@ -106,7 +108,7 @@ STUB
     run "$WORKDIR/driver" status
     [ "$output" = enabled ]
     grep -q 'HandleLidSwitch=suspend-then-hibernate' "$WORKDIR/etc/systemd/logind.conf.d/60-bluefin-hibernation.conf"
-    ! grep -R -E 'IdleAction|HandlePowerKey|IgnoreInhibited|gsettings|uupd' "$WORKDIR/etc"
+    run ! grep -R -E 'IdleAction|HandlePowerKey|IgnoreInhibited|gsettings|uupd' "$WORKDIR/etc"
     grep -q 'systemd-sleep suspend-then-hibernate' "$WORKDIR/etc/systemd/system/systemd-suspend.service.d/60-bluefin-hibernation.conf"
     run "$WORKDIR/driver" enable_hibernation
     [ "$status" -eq 0 ]
