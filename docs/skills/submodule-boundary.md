@@ -49,24 +49,29 @@ bluefin-branding → projectbluefin/branding (wallpapers, logos)
 
 Use `just overlay` to test `system_files/` changes as a systemd-sysext on a running Bluefin system, without building the full OCI image. See [`containerfile/SKILL.md`](containerfile/SKILL.md) for the full recipe, SELinux requirements, and activation steps.
 
-## Verification: shared systemd service conditions
+## PipeWire drop-ins
 
-When editing a shared service, validate its directives with systemd as well as
-checking any embedded shell logic. `ExecCondition=` belongs in `[Service]`;
-under `[Unit]` it is ignored, so a correct shell condition still cannot gate
-startup. Keep unit conditions such as `ConditionPathExists=` in `[Unit]`.
+Keep disabled PipeWire `.conf.d` overrides parseable. A comment-only file
+causes an `Invalid argument` load error at session startup. The shared
+`usr/share/pipewire/pipewire-pulse.conf.d/50-bluefin-bt-switch.conf` keeps an
+empty `pulse.cmd = [ ]` so automatic audio switching stays opt-in without
+the load error. Keep the `module-switch-on-connect` example commented out;
+enabling it by default would override the user's selected audio output again.
 
-For the Flatpak metadata refresh service, run on a host with Flatpak installed:
+Source: [PipeWire configuration, PulseAudio commands](https://docs.pipewire.org/page_man_pipewire-pulse_conf_5.html).
+
+### Verification
+
+With PipeWire's `pw-config` installed, run from the repository root:
 
 ```bash
-systemd-analyze verify system_files/shared/usr/lib/systemd/system/flatpak-appstream-refresh.service
+pw-config -p "$PWD/system_files/shared/usr/share/pipewire/pipewire-pulse.conf.d" \
+  -n 50-bluefin-bt-switch.conf list
 ```
 
-Check diagnostics for ignored directives, not just the exit status. If the
-validation host lacks Flatpak, replace only `ExecStart=` with `/usr/bin/true`
-in a temporary copy before verifying; keep `ExecCondition=` intact.
-
-Source: [systemd.service, Options and ExecCondition](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#ExecCondition=).
+Confirm the file loads without an error. On a running image, check
+`journalctl --user -b -u pipewire-pulse` after restarting the user session;
+the drop-in must not produce a load warning or enable automatic switching.
 
 ## Dakota exclusion pattern
 

@@ -12,7 +12,7 @@ RUN apk add git && \
 WORKDIR /src
 RUN go build -ldflags="-s -w" -o /uwelcome .
 
-FROM docker.io/library/alpine:latest@sha256:71e9b7bae160ba167fa17414401b94cbcdaf3c32feeab9298bd794a2a0614c35 AS build
+FROM docker.io/library/alpine:latest@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS build
 
 COPY --from=ghcr.io/projectbluefin/bluefin-wallpapers-gnome:latest@sha256:75ca2d8886d91db508e6338786a9e7508066aab930089d06e83ad6f9bbf16925 / /out/bluefin/usr/share
 
@@ -25,7 +25,7 @@ RUN apk add just curl
 # system_files. The release's checksums.txt is verified against its Sigstore
 # bundle, signed by ChairLift's release workflow for exactly this tag, and the
 # archive against its checksums.txt entry, so a bump changes CHAIRLIFT_RELEASE only.
-ARG CHAIRLIFT_RELEASE=v26.10.9
+ARG CHAIRLIFT_RELEASE=v26.10.10
 ARG TARGETARCH
 COPY --from=ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d /ko-app/cosign /usr/local/bin/cosign
 RUN set -eu; \
