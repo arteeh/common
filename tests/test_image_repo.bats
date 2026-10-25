@@ -7,28 +7,28 @@ setup() {
     export RESOLVER
 }
 
-@test "image-repo: bluefin latest routes to projectbluefin/bluefin" {
+@test "image-repo: bluefin latest routes to projectbluefin/common" {
     run "$RESOLVER" bluefin latest
     [ "$status" -eq 0 ]
-    [ "$output" = "projectbluefin/bluefin" ]
+    [ "$output" = "projectbluefin/common" ]
 }
 
-@test "image-repo: bluefin with lts tag routes to bluefin-lts" {
+@test "image-repo: bluefin with lts tag routes to common" {
     run "$RESOLVER" bluefin lts-20260601
     [ "$status" -eq 0 ]
-    [ "$output" = "projectbluefin/bluefin-lts" ]
+    [ "$output" = "projectbluefin/common" ]
 }
 
-@test "image-repo: bluefin-lts-hwe routes to bluefin-lts" {
+@test "image-repo: bluefin-lts-hwe routes to common" {
     run "$RESOLVER" bluefin-lts-hwe stable
     [ "$status" -eq 0 ]
-    [ "$output" = "projectbluefin/bluefin-lts" ]
+    [ "$output" = "projectbluefin/common" ]
 }
 
-@test "image-repo: bluefin-nvidia routes to bluefin" {
+@test "image-repo: bluefin-nvidia routes to common" {
     run "$RESOLVER" bluefin-nvidia stable
     [ "$status" -eq 0 ]
-    [ "$output" = "projectbluefin/bluefin" ]
+    [ "$output" = "projectbluefin/common" ]
 }
 
 @test "image-repo: dakota routes to projectbluefin/dakota" {
@@ -62,10 +62,10 @@ setup() {
     [ "$output" = "projectbluefin/common" ]
 }
 
-@test "image-repo: empty image name with lts tag still routes to bluefin-lts" {
+@test "image-repo: empty image name with lts tag uses caller default" {
     run "$RESOLVER" --default projectbluefin/bluefin "" lts-hwe
     [ "$status" -eq 0 ]
-    [ "$output" = "projectbluefin/bluefin-lts" ]
+    [ "$output" = "projectbluefin/bluefin" ]
 }
 
 @test "image-repo: --default= form is accepted" {
@@ -90,4 +90,20 @@ setup() {
         run grep -c 'projectbluefin/\(bluefin-lts\|dakota\)"' "$root/$consumer"
         [ "$output" = "0" ]
     done
+}
+
+@test "image-repo: Bluefin and unknown LTS images respect a custom default" {
+    for name in bluefin bluefin-nvidia bluefin-lts bluefin-lts-hwe unknown ""; do
+        for tag in latest lts-hwe; do
+            run "$RESOLVER" --default example/reports "$name" "$tag"
+            [ "$status" -eq 0 ]
+            [ "$output" = "example/reports" ]
+        done
+    done
+}
+
+@test "image-repo: Dakota keeps its repository with an LTS tag and custom default" {
+    run "$RESOLVER" --default example/reports dakota-nvidia lts-hwe
+    [ "$status" -eq 0 ]
+    [ "$output" = "projectbluefin/dakota" ]
 }

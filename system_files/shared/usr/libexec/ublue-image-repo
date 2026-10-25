@@ -40,31 +40,13 @@ done
 IMAGE_NAME="${1-${IMAGE_NAME-}}"
 IMAGE_TAG="${2-${IMAGE_TAG-}}"
 
+# Bluefin and LTS repositories are archived; use the caller's default for
+# those images and tags. Dakota retains its dedicated destination.
 case "$IMAGE_NAME" in
-    bluefin-lts*)
-        printf '%s\n' "projectbluefin/bluefin-lts"
-        ;;
-    bluefin)
-        # The plain bluefin image publishes the LTS stream under lts* tags.
-        if [[ "$IMAGE_TAG" == lts* ]]; then
-            printf '%s\n' "projectbluefin/bluefin-lts"
-        else
-            printf '%s\n' "projectbluefin/bluefin"
-        fi
-        ;;
-    bluefin*)
-        printf '%s\n' "projectbluefin/bluefin"
-        ;;
     dakota*)
         printf '%s\n' "projectbluefin/dakota"
         ;;
     *)
-        # No name (or an unrecognised fork): an lts* tag still identifies the
-        # LTS stream, otherwise defer to the caller-supplied default.
-        if [[ "$IMAGE_TAG" == lts* ]]; then
-            printf '%s\n' "projectbluefin/bluefin-lts"
-        else
-            printf '%s\n' "$UBLUE_IMAGE_REPO_DEFAULT"
-        fi
+        printf '%s\n' "$UBLUE_IMAGE_REPO_DEFAULT"
         ;;
 esac
