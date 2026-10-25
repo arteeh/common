@@ -283,6 +283,28 @@ once CI checks pass. The cosign image is a
 `COPY --from=` pin that Renovate's built-in `dockerfile` manager keeps current.
 This pin is independent of `CHAIRLIFT_SCHEMA_REF`, which follows the cask.
 
+The two pins can point at different ChairLift releases, and that is expected
+rather than a fault. `CHAIRLIFT_RELEASE` is the release whose Linux archive
+`common` installs root-side — the pkexec helper, its PolicyKit policy, and the
+GSettings schemas — into every image. `CHAIRLIFT_SCHEMA_REF` is the release the
+user-scoped GUI (the Homebrew cask) and `tests/check-chairlift-config` validate
+the managed config against. One is baked into the image at build time; the
+other ships in the desktop application the user launches, and the two are
+maintained separately — Renovate automerges the one-line `CHAIRLIFT_RELEASE`
+bump while the cask pin moves with the cask release — so a GUI/helper version
+skew is normal. The pins are deliberately not tied by a check: forcing them to
+the same value would fight that design.
+
+When they differ, keep the image's shipped schemas at or above the
+config-validation pin. The schemas the running GUI loads come from
+`CHAIRLIFT_RELEASE`; the config it reads is validated against
+`CHAIRLIFT_SCHEMA_REF`. ChairLift treats a config key its loaded schemas do not
+know as a schema error and disables the whole application, so a shipped schema
+older than the config the GUI validates against is the unsafe direction. Bump
+them to the same ChairLift release in one change when you can; if they must
+drift, bring `CHAIRLIFT_RELEASE` up to at least `CHAIRLIFT_SCHEMA_REF` first so
+the loaded schemas still accept the config.
+
 ---
 
 ## Confirming the service is working — bonedigger-report
