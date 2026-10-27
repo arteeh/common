@@ -44,7 +44,7 @@ jobs:
       - name: Test Fedora startup file discovery and behavior
         env:
           ZSH_TEST_INSTALLED: "1"
-        run: bats tests/test_zsh_config.bats
+        run: bats --print-output-on-failure tests/test_zsh_config.bats
 
   test:
     runs-on: ubuntu-26.04
