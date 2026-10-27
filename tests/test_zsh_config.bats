@@ -10,7 +10,10 @@ setup() {
 
 run_zsh() {
     # Keep the runner's dotfiles, XDG paths, and shell state out of the test.
-    run env -i HOME="$TEST_HOME" PATH="/usr/bin:/bin" LANG=C.UTF-8 \
+    # TERM=dumb stands in for the terminal every real login has: Fedora's
+    # /etc/zlogout runs `clear`, which prints "TERM environment variable not
+    # set." when TERM is missing and nothing for a dumb terminal.
+    run env -i HOME="$TEST_HOME" PATH="/usr/bin:/bin" LANG=C.UTF-8 TERM=dumb \
         "$ZSH_BIN" "$@"
 }
 
